@@ -5,7 +5,7 @@ import { OrientationEnum, type Video } from "../../types/shorts";
 
 const jokerTerms: string[] = ["nature", "globe", "space", "ocean"];
 const durationBufferSeconds = 3;
-const defaultTimeoutMs = 5000;
+const defaultTimeoutMs = 10000;
 const retryTimes = 3;
 
 export class PexelsAPI {

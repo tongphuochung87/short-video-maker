@@ -53,9 +53,8 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
 FROM base AS prod-deps
-COPY package.json pnpm-lock.yaml* /app/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile
-RUN pnpm install --prefer-offline --no-cache --prod
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml /app/
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm approve-builds --all -y && pnpm install --prod --frozen-lockfile
 
 FROM prod-deps AS build
 COPY tsconfig.json /app
