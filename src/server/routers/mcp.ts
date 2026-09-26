@@ -50,6 +50,27 @@ export class MCPRouter {
     );
 
     this.mcpServer.tool(
+      "cancel-video",
+      "Cancel a video that is queued or currently rendering",
+      {
+        videoId: z.string().describe("The ID of the video to cancel"),
+      },
+      async ({ videoId }) => {
+        const cancelled = this.shortCreator.cancelVideo(videoId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: cancelled
+                ? "success"
+                : "Video is not processing or not found",
+            },
+          ],
+        };
+      },
+    );
+
+    this.mcpServer.tool(
       "create-short-video",
       "Create a short video from a list of scenes",
       {

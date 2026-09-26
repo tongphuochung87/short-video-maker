@@ -109,6 +109,29 @@ export class APIRouter {
       },
     );
 
+    this.router.post(
+      "/short-video/:videoId/cancel",
+      (req: ExpressRequest, res: ExpressResponse) => {
+        const { videoId } = req.params;
+        if (!videoId) {
+          res.status(400).json({
+            error: "videoId is required",
+          });
+          return;
+        }
+        const cancelled = this.shortCreator.cancelVideo(videoId);
+        if (!cancelled) {
+          res.status(404).json({
+            error: "Video is not processing or not found",
+          });
+          return;
+        }
+        res.status(200).json({
+          success: true,
+        });
+      },
+    );
+
     this.router.delete(
       "/short-video/:videoId",
       (req: ExpressRequest, res: ExpressResponse) => {

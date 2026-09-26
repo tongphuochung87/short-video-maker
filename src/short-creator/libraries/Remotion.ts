@@ -1,6 +1,7 @@
 import z from "zod";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
+import type { CancelSignal } from "@remotion/renderer";
 import path from "path";
 import { ensureBrowser } from "@remotion/renderer";
 
@@ -36,6 +37,7 @@ export class Remotion {
     data: z.infer<typeof shortVideoSchema>,
     id: string,
     orientation: OrientationEnum,
+    cancelSignal?: CancelSignal,
   ) {
     const { component } = getOrientationConfig(orientation);
 
@@ -55,6 +57,7 @@ export class Remotion {
       serveUrl: this.bundled,
       outputLocation,
       inputProps: data,
+      cancelSignal,
       onProgress: ({ progress }) => {
         logger.debug(`Rendering ${id} ${Math.floor(progress * 100)}% complete`);
       },
