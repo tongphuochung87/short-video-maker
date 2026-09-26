@@ -148,7 +148,7 @@ export const createShortInput = z.object({
 });
 export type CreateShortInput = z.infer<typeof createShortInput>;
 
-export type VideoStatus = "processing" | "ready" | "failed";
+export type VideoStatus = "processing" | "ready" | "failed" | "cancelled";
 
 export type Music = {
   file: string;

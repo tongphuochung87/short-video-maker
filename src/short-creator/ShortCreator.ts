@@ -5,6 +5,7 @@ import cuid from "cuid";
 import path from "path";
 import https from "https";
 import http from "http";
+import { makeCancelSignal } from "@remotion/renderer";
 
 import { Kokoro } from "./libraries/Kokoro";
 import { Remotion } from "./libraries/Remotion";
@@ -30,6 +31,8 @@ export class ShortCreator {
     config: RenderConfig;
     id: string;
   }[] = [];
+  private cancelHandlers = new Map<string, () => void>();
+  private cancelledIds = new Set<string>();
   constructor(
     private config: Config,
     private remotion: Remotion,
@@ -44,6 +47,9 @@ export class ShortCreator {
     const videoPath = this.getVideoPath(id);
     if (this.queue.find((item) => item.id === id)) {
       return "processing";
+    }
+    if (this.cancelledIds.has(id)) {
+      return "cancelled";
     }
     if (fs.existsSync(videoPath)) {
       return "ready";
@@ -77,13 +83,47 @@ export class ShortCreator {
     );
     try {
       await this.createShort(id, sceneInput, config);
-      logger.debug({ id }, "Video created successfully");
+      if (this.cancelledIds.has(id)) {
+        logger.debug({ id }, "Video processing was cancelled");
+      } else {
+        logger.debug({ id }, "Video created successfully");
+      }
     } catch (error: unknown) {
-      logger.error(error, "Error creating video");
+      if (this.cancelledIds.has(id)) {
+        logger.debug({ id, error }, "Video processing was cancelled");
+      } else {
+        logger.error(error, "Error creating video");
+      }
     } finally {
       this.queue.shift();
+      this.cancelHandlers.delete(id);
       this.processQueue();
     }
+  }
+
+  public cancelVideo(videoId: string): boolean {
+    const queueIndex = this.queue.findIndex((item) => item.id === videoId);
+    if (queueIndex === -1) {
+      return false;
+    }
+    this.cancelledIds.add(videoId);
+
+    if (queueIndex === 0) {
+      // Currently being processed — signal the active step (e.g. Remotion
+      // render) to abort; processQueue's finally block removes it from the
+      // queue and moves on.
+      const cancel = this.cancelHandlers.get(videoId);
+      if (cancel) {
+        cancel();
+      }
+    } else {
+      // Still waiting in the queue — just drop it.
+      this.queue.splice(queueIndex, 1);
+    }
+
+    fs.removeSync(this.getVideoPath(videoId));
+    logger.info({ videoId }, "Video processing cancelled");
+    return true;
   }
 
   private async createShort(
@@ -98,6 +138,15 @@ export class ShortCreator {
       },
       "Creating short video",
     );
+    const { cancelSignal, cancel } = makeCancelSignal();
+    this.cancelHandlers.set(videoId, cancel);
+
+    const throwIfCancelled = () => {
+      if (this.cancelledIds.has(videoId)) {
+        throw new Error(`Video ${videoId} was cancelled`);
+      }
+    };
+    throwIfCancelled();
     const scenes: Scene[] = [];
     let totalDuration = 0;
     const excludeVideoIds = [];
@@ -185,6 +234,7 @@ export class ShortCreator {
 
       totalDuration += audioLength;
       index++;
+      throwIfCancelled();
     }
     if (config.paddingBack) {
       totalDuration += config.paddingBack / 1000;
@@ -193,23 +243,38 @@ export class ShortCreator {
     const selectedMusic = this.findMusic(totalDuration, config.music);
     logger.debug({ selectedMusic }, "Selected music for the video");
 
-    await this.remotion.render(
-      {
-        music: selectedMusic,
-        scenes,
-        config: {
-          durationMs: totalDuration * 1000,
-          paddingBack: config.paddingBack,
-          ...{
-            captionBackgroundColor: config.captionBackgroundColor,
-            captionPosition: config.captionPosition,
+    throwIfCancelled();
+
+    try {
+      await this.remotion.render(
+        {
+          music: selectedMusic,
+          scenes,
+          config: {
+            durationMs: totalDuration * 1000,
+            paddingBack: config.paddingBack,
+            ...{
+              captionBackgroundColor: config.captionBackgroundColor,
+              captionPosition: config.captionPosition,
+            },
+            musicVolume: config.musicVolume,
           },
-          musicVolume: config.musicVolume,
         },
-      },
-      videoId,
-      orientation,
-    );
+        videoId,
+        orientation,
+        cancelSignal,
+      );
+    } catch (error: unknown) {
+      if (this.cancelledIds.has(videoId)) {
+        fs.removeSync(this.getVideoPath(videoId));
+      }
+      throw error;
+    }
+
+    if (this.cancelledIds.has(videoId)) {
+      fs.removeSync(this.getVideoPath(videoId));
+      throw new Error(`Video ${videoId} was cancelled`);
+    }
 
     for (const file of tempFiles) {
       fs.removeSync(file);

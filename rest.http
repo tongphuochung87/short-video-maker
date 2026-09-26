@@ -44,6 +44,12 @@ Accept: application/json
 
 ###
 
+# @name cancel_video
+POST {{host}}/api/short-video/{{videoId}}/cancel HTTP/1.1
+Accept: application/json
+
+###
+
 # @name list_available_voices
 GET {{host}}/api/voices HTTP/1.1
 Accept: application/json
